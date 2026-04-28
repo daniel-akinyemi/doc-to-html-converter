@@ -247,7 +247,7 @@ export function Converter() {
         warnings: [],
         sizeKb: Math.max(1, Math.round(new Blob([html]).size / 1024)),
       });
-      setView("preview");
+      setView("source");
     },
     [],
   );
