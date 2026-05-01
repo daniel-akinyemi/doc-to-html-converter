@@ -20,7 +20,7 @@ HTML.
 
 | Feature                         | Pasted content | `.docx` file |
 | ------------------------------- | :------------: | :----------: |
-| Headings (`<h1>`–`<h6>`)        |       ✓        |      ✓       |
+| Headings (`<h3>`–`<h6>`)        |       ✓        |      ✓       |
 | Paragraphs, lists, links        |       ✓        |      ✓       |
 | Tables                          |       ✓        |      ✓       |
 | Images                          |       ✓        |   ✓ (base64) |
@@ -28,11 +28,18 @@ HTML.
 | Underline, strikethrough        |       ✓        |      ✓       |
 | Superscript, subscript          |       ✓        |      ✓       |
 | Inline `<code>`, `<blockquote>` |       ✓        |      ✓       |
-| Text alignment                  |       ✓        |      —       |
 | Text colour, highlight          |       ✓        |      —       |
 
+**Heading levels are clamped to `<h3>` maximum.** Anything that came in as
+`<h1>` or `<h2>` (or Word's *Title* / *Heading 1* / *Heading 2* styles) is
+emitted as `<h3>`. `<h3>`–`<h6>` pass through unchanged.
+
+**Text alignment is not preserved** — output is always left-aligned.
+`text-align` is dropped from inline styles, `<center>` tags are unwrapped,
+and centered Word/Docs paragraphs come out left.
+
 For pasted content, the sanitizer reads inline CSS (`font-weight`,
-`font-style`, `text-decoration`, `vertical-align`, `text-align`, `color`,
+`font-style`, `text-decoration`, `vertical-align`, `color`,
 `background-color`) and either converts it to a semantic tag or preserves it
 on the element. Default values (black text, white/transparent backgrounds)
 are stripped to keep the output clean.

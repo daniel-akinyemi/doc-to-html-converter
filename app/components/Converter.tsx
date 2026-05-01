@@ -65,8 +65,12 @@ function loadMammoth(): Promise<MammothLib> {
 }
 
 // Extend mammoth's defaults so character formatting that it ignores by default
-// (underline, strikethrough, etc.) survives into the HTML output.
+// (underline, strikethrough, etc.) survives into the HTML output. h1/h2/Title
+// are clamped to h3 — h3 is the largest heading we let through.
 const MAMMOTH_STYLE_MAP: string[] = [
+  "p[style-name='Heading 1'] => h3:fresh",
+  "p[style-name='Heading 2'] => h3:fresh",
+  "p[style-name='Title'] => h3:fresh",
   "u => u",
   "strike => s",
   "r[style-name='Strong'] => strong",
@@ -212,19 +216,19 @@ function sanitizeWordHtml(rawHtml: string): string {
   const doc = new DOMParser().parseFromString(cleaned, "text/html");
   const root = doc.body;
 
-  // 1. Promote MsoHeading / MsoTitle paragraphs to real headings.
+  // 1. Promote MsoHeading / MsoTitle paragraphs to real headings (clamped to h3).
   root.querySelectorAll("p[class]").forEach((p) => {
     const cls = p.getAttribute("class") || "";
     const m = /\bMsoHeading(\d)\b/i.exec(cls);
     if (m) {
-      const level = Math.min(6, Math.max(1, parseInt(m[1], 10)));
+      const level = Math.min(6, Math.max(3, parseInt(m[1], 10)));
       const h = doc.createElement(`h${level}`);
       const style = p.getAttribute("style");
       if (style) h.setAttribute("style", style);
       while (p.firstChild) h.appendChild(p.firstChild);
       p.replaceWith(h);
     } else if (/\bMsoTitle\b/i.test(cls)) {
-      const h = doc.createElement("h1");
+      const h = doc.createElement("h3");
       const style = p.getAttribute("style");
       if (style) h.setAttribute("style", style);
       while (p.firstChild) h.appendChild(p.firstChild);
@@ -285,6 +289,10 @@ function sanitizeWordHtml(rawHtml: string): string {
       }
       continue;
     }
+    if (tag === "center") {
+      unwrap(el);
+      continue;
+    }
   }
 
   // 5. For every element, derive semantic wrappers + preserved styles from CSS.
@@ -315,12 +323,6 @@ function sanitizeWordHtml(rawHtml: string): string {
 
     const preserved: string[] = [];
     if (styleAttr) {
-      if (BLOCK_TAGS.has(tag)) {
-        const align = styles["text-align"];
-        if (align === "center" || align === "right" || align === "justify") {
-          preserved.push(`text-align: ${align}`);
-        }
-      }
       const color = styles["color"];
       if (color && !isDefaultColor(color)) preserved.push(`color: ${color}`);
       const bg = styles["background-color"];
@@ -356,6 +358,16 @@ function sanitizeWordHtml(rawHtml: string): string {
   // 7. Drop empty paragraphs.
   root.querySelectorAll("p").forEach((p) => {
     if (!p.textContent?.trim() && !p.querySelector("img")) p.remove();
+  });
+
+  // 8. Clamp headings to h3 maximum.
+  root.querySelectorAll("h1, h2").forEach((h) => {
+    const replacement = doc.createElement("h3");
+    for (const attr of Array.from(h.attributes)) {
+      replacement.setAttribute(attr.name, attr.value);
+    }
+    while (h.firstChild) replacement.appendChild(h.firstChild);
+    h.replaceWith(replacement);
   });
 
   return root.innerHTML.trim();

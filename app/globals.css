@@ -223,7 +223,6 @@ body {
   font-size: 0.875rem;
   color: var(--muted-foreground);
   font-style: italic;
-  text-align: center;
 }
 
 .prose code {
