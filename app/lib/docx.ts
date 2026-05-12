@@ -351,7 +351,12 @@ export const SECTION_META: { id: SectionId; label: string }[] = [
 
 export type SplitProduct = {
   title: string;
-  /** SKU pulled from the doc header ("SKU XXX" line); "" if none was found. */
+  /**
+   * The "ID XXX" value from the doc header (e.g. "666-0387AA"). This is what
+   * the customer's Matrixify "Variant SKU" column actually contains. "" if none.
+   */
+  id: string;
+  /** Supplier SKU from the doc header ("SKU XXX" line, e.g. "HSB-119131"); "" if none. */
   sku: string;
   sections: Record<SectionId, string>;
 };
@@ -464,12 +469,24 @@ function bucketChunk(
   return out;
 }
 
-// Pull the first "SKU XXX" token out of a run of blocks (the doc header
-// usually carries it, e.g. "SKU HSB-119131"). Returns "" if none was found.
+// Pull the first "SKU XXX" token out of a run of blocks (e.g. "SKU HSB-119131").
 function extractSku(nodes: Element[]): string {
   for (const el of nodes) {
     const m = /\bSKU[:\s]+(\S+)/i.exec(el.textContent || "");
     if (m) return m[1].replace(/[.,;:)\]]+$/, "").trim();
+  }
+  return "";
+}
+
+// Pull the first "ID XXX" code out of a run of blocks (e.g. "ID 666-0387AA
+// Manufacturer - Aira" -> "666-0387AA"). This is the value the customer's
+// Matrixify "Variant SKU" column carries.
+function extractId(nodes: Element[]): string {
+  for (const el of nodes) {
+    const m = /\bID[:\s]+(\d{2,4}-\d{2,5}[A-Za-z]{1,4})(?![A-Za-z])/i.exec(
+      el.textContent || "",
+    );
+    if (m) return m[1].trim();
   }
   return "";
 }
@@ -481,6 +498,7 @@ export function splitDocument(html: string, fallbackTitle: string): SplitResult 
   const fallback = fallbackTitle.trim() || "Document";
   const blank = (): SplitProduct => ({
     title: fallback,
+    id: "",
     sku: "",
     sections: emptySections(),
   });
@@ -533,6 +551,7 @@ export function splitDocument(html: string, fallbackTitle: string): SplitResult 
     title:
       c.title?.trim() ||
       `${fallback}${chunks.length > 1 ? ` (${i + 1})` : ""}`,
+    id: extractId(c.nodes),
     sku: extractSku(c.nodes),
     sections: bucketChunk(c.nodes, doc),
   }));

@@ -66,13 +66,13 @@ const SECTION_COLUMN: { id: SectionId; re: RegExp }[] = [
 export type ExportReport = {
   sheetName: string;
   rowsScanned: number; // data rows with a non-empty Variant SKU
-  rowsMatched: number; // ...of those, ones whose SKU matched a split product
+  rowsMatched: number; // ...of those, ones whose key matched a split product
   cellsWritten: number;
   mappedColumns: { section: string; header: string }[];
   missingColumns: string[]; // sections whose column wasn't found in the sheet
-  matchedProducts: { title: string; sku: string }[];
-  unmatchedProducts: { title: string; sku: string }[]; // had a SKU but no row
-  productsWithoutSku: string[]; // doc had no "SKU ..." line
+  matchedProducts: { title: string; key: string }[];
+  unmatchedProducts: { title: string; key: string }[]; // had a key but no row
+  productsWithoutKey: string[]; // doc had no "ID ..." / "SKU ..." line
 };
 
 export type ExportResult = {
@@ -148,28 +148,33 @@ export async function exportToMatrixify(
     );
   }
 
-  const bySku = new Map<string, SplitProduct>();
-  const productsWithoutSku: string[] = [];
+  // Index products by every key they carry — the "ID xxx" code (what the
+  // Variant SKU column actually holds) and the supplier "SKU xxx" as a fallback.
+  const byKey = new Map<string, SplitProduct>();
+  const primaryKey = (p: SplitProduct) => p.id.trim() || p.sku.trim();
+  const productsWithoutKey: string[] = [];
   for (const p of products) {
-    const key = p.sku.trim();
-    if (key) bySku.set(key, p);
-    else productsWithoutSku.push(p.title);
+    const id = p.id.trim();
+    const sku = p.sku.trim();
+    if (id) byKey.set(id, p);
+    if (sku && !byKey.has(sku)) byKey.set(sku, p);
+    if (!id && !sku) productsWithoutKey.push(p.title);
   }
 
-  const matchedSkus = new Set<string>();
+  const matchedProductSet = new Set<SplitProduct>();
   let rowsScanned = 0;
   let rowsMatched = 0;
   let cellsWritten = 0;
 
   for (let r = range.s.r + 1; r <= range.e.r; r++) {
     const skuCell = ws[XLSX.utils.encode_cell({ r, c: skuCol })];
-    const sku = skuCell ? cellText(skuCell.v) : "";
-    if (!sku) continue;
+    const variantSku = skuCell ? cellText(skuCell.v) : "";
+    if (!variantSku) continue;
     rowsScanned++;
-    const product = bySku.get(sku);
+    const product = byKey.get(variantSku);
     if (!product) continue;
     rowsMatched++;
-    matchedSkus.add(sku);
+    matchedProductSet.add(product);
     for (const [id, c] of colFor) {
       const html = product.sections[id] || "";
       if (!html.trim()) continue; // leave the cell as-is when we have nothing
@@ -178,14 +183,14 @@ export async function exportToMatrixify(
     }
   }
 
-  const matchedProducts: { title: string; sku: string }[] = [];
-  const unmatchedProducts: { title: string; sku: string }[] = [];
+  const matchedProducts: { title: string; key: string }[] = [];
+  const unmatchedProducts: { title: string; key: string }[] = [];
   for (const p of products) {
-    const key = p.sku.trim();
+    const key = primaryKey(p);
     if (!key) continue;
-    (matchedSkus.has(key) ? matchedProducts : unmatchedProducts).push({
+    (matchedProductSet.has(p) ? matchedProducts : unmatchedProducts).push({
       title: p.title,
-      sku: key,
+      key,
     });
   }
 
@@ -208,7 +213,7 @@ export async function exportToMatrixify(
       missingColumns,
       matchedProducts,
       unmatchedProducts,
-      productsWithoutSku,
+      productsWithoutKey,
     },
   };
 }
