@@ -1,10 +1,17 @@
 # Folio — Document → HTML
 
-A browser-based converter that turns Microsoft Word and Google Docs content
-into clean, semantic HTML. Conversion happens entirely on the client — files
-and clipboard contents never leave the user's machine.
+A browser-based tool that turns Microsoft Word and Google Docs content into
+clean, semantic HTML. Everything runs on the client — files and clipboard
+contents never leave the user's machine.
 
-## Two ways to convert
+Two pages:
+
+- **`/` — Convert** — a whole document → one HTML block.
+- **`/split` — Split** — a structured document → five labelled HTML sections.
+
+## Convert (`/`)
+
+Two ways in:
 
 1. **Drop a `.docx` file** — parsed in-browser with [mammoth.js].
 2. **Paste content** — click *Paste content* (uses the Clipboard API) or just
@@ -15,6 +22,33 @@ and clipboard contents never leave the user's machine.
 The output is shown as a live **Preview** and as raw **HTML** source, with a
 one-click copy. File uploads default to the Preview tab; pastes default to
 HTML.
+
+## Split (`/split`)
+
+Takes a structured document (built for product "buyer's guide"-style docs) and
+breaks it into five sections, each as its own copyable HTML block, shown in
+tabs:
+
+| Section                      | Built from these doc headings                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Product overview**         | the intro text + *What makes this product stand out?* + *What is this product made of?* + *What is it used for?* + *Why you'll appreciate this product* |
+| **Specifications**           | *Specs and compliance you should know*                                                                       |
+| **Sizing & selection**       | *How to choose the right size and type* + *Explore other options*                                            |
+| **Care & storage**           | *Care, storage, and disposal*                                                                                |
+| **Frequently asked questions** | *Frequently asked questions*                                                                                |
+
+The original headings are kept as `<h3>` sub-headings inside each section. The
+two "Ready to upgrade your supply?" marketing blocks are dropped. A section
+with no matching content shows "Not found in this document".
+
+**Single doc vs. bundle.** If the file holds several `… – Complete Buyer's
+Guide` titles, each one is detected as a separate product (split on its own,
+selectable from a picker at the top). If there's just one, you get a flat
+5-tab view. Unstructured docs (no recognised headings) land entirely in
+*Product overview* with the other four tabs empty.
+
+Input methods are the same as the converter: file drop, *Paste content*, or
+<kbd>⌘V</kbd>.
 
 ## What's preserved
 
@@ -45,11 +79,12 @@ on the element. Default values (black text, white/transparent backgrounds)
 are stripped to keep the output clean.
 
 For `.docx` files, [mammoth.js] handles structural conversion. A custom
-[style map][styleMap] in [`app/components/Converter.tsx`](./app/components/Converter.tsx)
-opts into underline, strikethrough, code runs, and quote/caption paragraphs
-that mammoth ignores by default. Paragraph alignment and font colour are
-**not** preserved on this path — this is a mammoth limitation. Pasting from
-the same document captures both.
+[style map][styleMap] in [`app/lib/docx.ts`](./app/lib/docx.ts) opts into
+underline, strikethrough, code runs, and quote/caption paragraphs that
+mammoth ignores by default. Paragraph alignment and font colour are **not**
+preserved on this path — this is a mammoth limitation. Pasting from the same
+document captures both. (The split tool runs documents through the same
+conversion before slicing them up, so the same rules apply.)
 
 ## What's stripped
 
@@ -79,11 +114,18 @@ pnpm lint   # eslint
 
 ```
 app/
-  layout.tsx          Root layout — fonts, metadata
-  page.tsx            Landing page — hero, converter section, footer
-  globals.css         Tailwind 4 entry + design tokens + .prose styles
+  layout.tsx           Root layout — fonts, metadata
+  page.tsx             "Convert" page — hero, converter, footer
+  split/page.tsx       "Split" page — hero, splitter, footer
+  globals.css          Tailwind 4 entry + design tokens + .prose styles
+  lib/
+    docx.ts            mammoth loader, style map, paste sanitiser, splitDocument()
   components/
-    Converter.tsx     Drop zone, paste handler, sanitizer, view toggle
+    Converter.tsx      Convert page UI
+    Splitter.tsx       Split page UI — product picker + section tabs
+    UploadZone.tsx     Shared: drop zone + paste card + ⌘V listener
+    ViewToggle.tsx     Shared: Preview / HTML toggle
+    SiteChrome.tsx     Shared header & footer
 public/
   mammoth.browser.min.js   Pre-built UMD bundle, lazy-loaded on first use
 ```
@@ -92,12 +134,12 @@ public/
 
 ### File path
 
-`Converter.tsx` lazy-injects `/mammoth.browser.min.js` into the page on the
-first upload (cached via a module-scoped promise so it loads exactly once).
-The file is read as an `ArrayBuffer` and passed to
-`mammoth.convertToHtml(input, { styleMap })`. Mammoth returns clean semantic
-HTML plus an array of conversion notes, which are surfaced under a
-disclosure in the result header.
+`loadMammoth()` (in [`app/lib/docx.ts`](./app/lib/docx.ts)) lazy-injects
+`/mammoth.browser.min.js` into the page on the first upload (cached via a
+module-scoped promise so it loads exactly once). The file is read as an
+`ArrayBuffer` and passed to `mammoth.convertToHtml(input, { styleMap })`.
+Mammoth returns clean semantic HTML plus an array of conversion notes, which
+are surfaced under a disclosure in the converter's result header.
 
 The pre-built UMD bundle is used instead of `import("mammoth")` because
 mammoth's Node entry references `fs` and `path`, which don't survive
@@ -107,27 +149,46 @@ browser bundling.
 
 When the user clicks *Paste content*, `navigator.clipboard.read()` returns
 `ClipboardItem`s; the app prefers `text/html` and falls back to
-`text/plain`. A document-level `paste` listener (active only when the
-converter is idle, and only when the paste target isn't an `<input>` /
+`text/plain`. A document-level `paste` listener (active only while the
+upload zone is shown, and only when the paste target isn't an `<input>` /
 `<textarea>` / `contenteditable`) provides the same flow for <kbd>⌘V</kbd>.
+This lives in [`app/components/UploadZone.tsx`](./app/components/UploadZone.tsx),
+shared by both pages.
 
-`sanitizeWordHtml` runs the HTML through these passes:
+`sanitizeWordHtml` (in [`app/lib/docx.ts`](./app/lib/docx.ts)) runs the HTML
+through these passes:
 
-1. Promote `MsoHeading1-6` / `MsoTitle` paragraphs to real `<h1>`–`<h6>`
-   (style attributes are carried through so alignment survives).
+1. Promote `MsoHeading1-6` / `MsoTitle` paragraphs to real headings (clamped
+   to `<h3>`).
 2. Unwrap Google Docs' outer `<b style="font-weight:normal">`.
 3. Drop non-content elements (`<style>`, `<script>`, etc.) and Office
    namespace tags.
-4. Convert legacy presentational tags (`<b>`, `<i>`, `<font>`) to their
-   semantic equivalents, keeping any inline style for the next pass.
+4. Convert legacy presentational tags (`<b>`, `<i>`, `<font>`, `<center>`) to
+   semantic equivalents (or unwrap), keeping any inline style for the next pass.
 5. For every element: read inline styles, derive semantic wrappers
-   (`<strong>` / `<em>` / `<u>` / `<s>` / `<sup>` / `<sub>`), preserve a
-   whitelist of styles (`text-align` on block elements, plus `color` and
-   `background-color` when not default), then strip everything else.
+   (`<strong>` / `<em>` / `<u>` / `<s>` / `<sup>` / `<sub>`), preserve `color`
+   and `background-color` when not default, then strip everything else.
 6. Unwrap `<span>` / `<div>` left with no attributes; remove empty `<p>`s.
+7. Clamp any remaining `<h1>` / `<h2>` to `<h3>`.
 
 `plainTextToHtml` is the fallback for clipboards with only `text/plain`:
 it splits on blank lines into `<p>` blocks with `<br/>` for single newlines.
+
+### Splitting
+
+`splitDocument(html, fallbackTitle)` parses the converted/sanitised HTML,
+scans the top-level blocks, and:
+
+- Detects product boundaries by heading/paragraph text containing
+  "Complete Buyer's Guide" — one or zero ⇒ single product, more ⇒ a bundle
+  (walking back over `SKU` / `ID` metadata lines to keep each product's
+  preamble with the right product).
+- Within each product, walks the blocks in order and routes each into one of
+  the five buckets (or `drop`) using a text-match table on recognised section
+  headings; content before the first recognised heading goes to *Product
+  overview*.
+- Recognised section headings are re-emitted as `<h3>`; each bucket's HTML is
+  serialised, with `<h1>`/`<h2>` clamped to `<h3>` and empty `<p>`s removed.
 
 ## Tech
 
