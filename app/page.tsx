@@ -1,16 +1,27 @@
+import Link from "next/link";
 import { Converter } from "./components/Converter";
+import { SiteFooter, SiteHeader } from "./components/SiteChrome";
 
 export default function Home() {
   return (
     <div className="flex flex-col flex-1">
-      <SiteHeader />
+      <SiteHeader active="convert" />
 
       <main className="flex-1">
         <Hero />
 
-        <section className="border-t border-border">
+        <section id="convert" className="border-t border-border">
           <div className="mx-auto max-w-5xl px-6 sm:px-10 py-16 sm:py-24">
             <Converter />
+            <p className="mt-6 font-mono text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
+              Got a structured doc?{" "}
+              <Link
+                href="/split"
+                className="underline underline-offset-4 decoration-foreground/30 hover:decoration-foreground transition-colors"
+              >
+                Split it into sections →
+              </Link>
+            </p>
           </div>
         </section>
 
@@ -19,32 +30,6 @@ export default function Home() {
 
       <SiteFooter />
     </div>
-  );
-}
-
-function SiteHeader() {
-  return (
-    <header className="border-b border-border">
-      <div className="mx-auto max-w-5xl px-6 sm:px-10 h-14 flex items-center justify-between">
-        <div className="font-mono text-[11px] tracking-[0.3em] uppercase">
-          Folio
-        </div>
-        <nav className="flex items-center gap-6 font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
-          <a
-            href="#convert"
-            className="hover:text-foreground transition-colors"
-          >
-            Convert
-          </a>
-          <a
-            href="#about"
-            className="hover:text-foreground transition-colors"
-          >
-            About
-          </a>
-        </nav>
-      </div>
-    </header>
   );
 }
 
@@ -63,14 +48,13 @@ function Hero() {
         <h1 className="font-serif text-5xl sm:text-7xl md:text-[5.5rem] leading-[0.95] tracking-tight max-w-4xl">
           Beautiful HTML
           <br />
-          from your{" "}
-          <em className="text-muted-foreground">Word documents.</em>
+          from your <em className="text-muted-foreground">Word documents.</em>
         </h1>
 
         <p className="mt-8 max-w-xl text-base sm:text-lg text-muted-foreground leading-relaxed">
           Drop in a <code className="font-mono text-sm">.docx</code> from
-          Microsoft Word or Google Docs. Get clean, semantic HTML — preview
-          it, copy it, ship it.
+          Microsoft Word or Google Docs. Get clean, semantic HTML — preview it,
+          copy it, ship it.
         </p>
 
         <div className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-3 font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
@@ -84,8 +68,6 @@ function Hero() {
             <Dot /> Semantic markup
           </span>
         </div>
-
-        <div id="convert" className="sr-only" />
       </div>
     </section>
   );
@@ -110,19 +92,16 @@ function Features() {
     {
       n: "02",
       title: "Semantic, not visual",
-      body: "Headings, paragraphs, lists, tables, links, images, bold and italic — converted to the right HTML tags so the structure holds up anywhere you paste it.",
+      body: "Headings, paragraphs, lists, tables, images, links, bold, italic, underline — converted to the right HTML tags so the structure holds up anywhere you paste it.",
     },
     {
       n: "03",
-      title: "Built for copying",
-      body: "One click puts the HTML on your clipboard. The live preview shows you exactly what you’re about to paste.",
+      title: "Convert, or split",
+      body: "Turn a whole doc into one HTML block — or split a structured doc into labelled sections (overview, specs, sizing, care, FAQ), each ready to copy on its own.",
     },
   ];
   return (
-    <section
-      id="about"
-      className="border-t border-border"
-    >
+    <section id="about" className="border-t border-border">
       <div className="mx-auto max-w-5xl px-6 sm:px-10 py-20 sm:py-28">
         <div className="font-mono text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-12">
           § How it works
@@ -144,16 +123,5 @@ function Features() {
         </div>
       </div>
     </section>
-  );
-}
-
-function SiteFooter() {
-  return (
-    <footer className="border-t border-border">
-      <div className="mx-auto max-w-5xl px-6 sm:px-10 h-14 flex items-center justify-between font-mono text-[10px] tracking-[0.25em] uppercase text-muted-foreground">
-        <span>© Folio</span>
-        <span>Made for writers, editors & engineers</span>
-      </div>
-    </footer>
   );
 }
