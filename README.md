@@ -50,6 +50,32 @@ selectable from a picker at the top). If there's just one, you get a flat
 Input methods are the same as the converter: file drop, *Paste content*, or
 <kbd>⌘V</kbd>.
 
+### Export to Matrixify (.xlsx)
+
+From the split result you can press **Export .xlsx** and pick the customer's
+Matrixify (Shopify) export. The tool fills the rich-text metafield columns
+per **`Variant SKU`** — each product's SKU is taken from the `SKU …` line in
+its doc header (e.g. `SKU HSB-119131`):
+
+| Split section              | Matrixify column                              |
+| -------------------------- | --------------------------------------------- |
+| Product overview           | `Metafield: beyond.overview [rich_text_field]`     |
+| Specifications             | `Metafield: beyond.specs [rich_text_field]`        |
+| Sizing & selection         | `Metafield: beyond.sizing_guide [rich_text_field]` |
+| Care & storage             | `Metafield: beyond.care_storage [rich_text_field]` |
+| Frequently asked questions | `Metafield: beyond.faqs [rich_text_field]`         |
+
+Columns are matched by header substring (`beyond.overview`, `beyond.specs`,
+`beyond.sizing_guide`, `beyond.care_storage`, `beyond.faqs`), and the tool
+uses the first sheet that has a `Variant SKU` column. Every other cell — `ID`,
+`Handle`, `Command`, `Body HTML`, etc. — is left exactly as it was; a cell is
+only written when our section has content (an empty section never blanks an
+existing value). The updated workbook downloads as `<name> — updated.xlsx`,
+and a report panel shows how many SKU rows matched, which products had no
+matching row, and which had no SKU in the doc. The `xlsx` parsing/writing uses
+SheetJS, loaded on demand from
+[`public/xlsx.full.min.js`](./public/xlsx.full.min.js).
+
 ## What's preserved
 
 | Feature                         | Pasted content | `.docx` file |
@@ -120,14 +146,16 @@ app/
   globals.css          Tailwind 4 entry + design tokens + .prose styles
   lib/
     docx.ts            mammoth loader, style map, paste sanitiser, splitDocument()
+    matrixify.ts       SheetJS loader + exportToMatrixify() (fills the .xlsx)
   components/
     Converter.tsx      Convert page UI
-    Splitter.tsx       Split page UI — product picker + section tabs
+    Splitter.tsx       Split page UI — product picker, section tabs, .xlsx export
     UploadZone.tsx     Shared: drop zone + paste card + ⌘V listener
     ViewToggle.tsx     Shared: Preview / HTML toggle
     SiteChrome.tsx     Shared header & footer
 public/
-  mammoth.browser.min.js   Pre-built UMD bundle, lazy-loaded on first use
+  mammoth.browser.min.js   mammoth.js UMD bundle, lazy-loaded on first .docx
+  xlsx.full.min.js         SheetJS UMD bundle, lazy-loaded on first export
 ```
 
 ## How the conversion works
@@ -196,7 +224,12 @@ scans the top-level blocks, and:
 - React 19
 - Tailwind CSS 4 (CSS-first config in [`app/globals.css`](./app/globals.css))
 - [mammoth.js][mammoth.js] for `.docx` parsing
+- [SheetJS / xlsx](https://sheetjs.com) for reading & writing the Matrixify workbook
 - Geist Sans + Geist Mono + Instrument Serif
+
+The npm `xlsx` package is only present for its TypeScript types — at runtime
+the standalone build in `public/` is loaded via a `<script>` tag (same pattern
+as mammoth), so neither library is in the app bundle until it's first used.
 
 [mammoth.js]: https://github.com/mwilliamson/mammoth.js
 [styleMap]: https://github.com/mwilliamson/mammoth.js#writing-style-maps

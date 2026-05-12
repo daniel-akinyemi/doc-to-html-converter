@@ -351,6 +351,8 @@ export const SECTION_META: { id: SectionId; label: string }[] = [
 
 export type SplitProduct = {
   title: string;
+  /** SKU pulled from the doc header ("SKU XXX" line); "" if none was found. */
+  sku: string;
   sections: Record<SectionId, string>;
 };
 
@@ -462,21 +464,36 @@ function bucketChunk(
   return out;
 }
 
+// Pull the first "SKU XXX" token out of a run of blocks (the doc header
+// usually carries it, e.g. "SKU HSB-119131"). Returns "" if none was found.
+function extractSku(nodes: Element[]): string {
+  for (const el of nodes) {
+    const m = /\bSKU[:\s]+(\S+)/i.exec(el.textContent || "");
+    if (m) return m[1].replace(/[.,;:)\]]+$/, "").trim();
+  }
+  return "";
+}
+
 // Split a converted/sanitised HTML document into 5 named sections. If the
 // document contains several "... – Complete Buyer's Guide" titles, each one
 // becomes its own product; otherwise it's treated as a single product.
 export function splitDocument(html: string, fallbackTitle: string): SplitResult {
   const fallback = fallbackTitle.trim() || "Document";
+  const blank = (): SplitProduct => ({
+    title: fallback,
+    sku: "",
+    sections: emptySections(),
+  });
   if (typeof window === "undefined") {
-    return { products: [{ title: fallback, sections: emptySections() }] };
+    return { products: [blank()] };
   }
   const doc = new DOMParser().parseFromString(html, "text/html");
   if (!doc.body) {
-    return { products: [{ title: fallback, sections: emptySections() }] };
+    return { products: [blank()] };
   }
   const nodes = Array.from(doc.body.children);
   if (nodes.length === 0) {
-    return { products: [{ title: fallback, sections: emptySections() }] };
+    return { products: [blank()] };
   }
 
   const titleIdxs: number[] = [];
@@ -516,6 +533,7 @@ export function splitDocument(html: string, fallbackTitle: string): SplitResult 
     title:
       c.title?.trim() ||
       `${fallback}${chunks.length > 1 ? ` (${i + 1})` : ""}`,
+    sku: extractSku(c.nodes),
     sections: bucketChunk(c.nodes, doc),
   }));
 
