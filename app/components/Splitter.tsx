@@ -398,7 +398,7 @@ function ExportPanel({
           <ul className="mt-1 space-y-0.5">
             {r.unmatchedProducts.slice(0, 30).map((p, i) => (
               <li key={i}>
-                — {p.title} <span className="opacity-70">[{p.sku}]</span>
+                — {p.title} <span className="opacity-70">[{p.key}]</span>
               </li>
             ))}
             {r.unmatchedProducts.length > 30 && (
@@ -409,20 +409,20 @@ function ExportPanel({
           </ul>
         </details>
       )}
-      {r.productsWithoutSku.length > 0 && (
+      {r.productsWithoutKey.length > 0 && (
         <details>
           <summary className="cursor-pointer select-none">
-            {r.productsWithoutSku.length} product
-            {r.productsWithoutSku.length === 1 ? "" : "s"} with no “SKU …” line
-            in the doc
+            {r.productsWithoutKey.length} product
+            {r.productsWithoutKey.length === 1 ? "" : "s"} with no “ID …” / “SKU
+            …” line in the doc
           </summary>
           <ul className="mt-1 space-y-0.5">
-            {r.productsWithoutSku.slice(0, 30).map((t, i) => (
+            {r.productsWithoutKey.slice(0, 30).map((t, i) => (
               <li key={i}>— {t}</li>
             ))}
-            {r.productsWithoutSku.length > 30 && (
+            {r.productsWithoutKey.length > 30 && (
               <li className="opacity-70">
-                + {r.productsWithoutSku.length - 30} more
+                + {r.productsWithoutKey.length - 30} more
               </li>
             )}
           </ul>

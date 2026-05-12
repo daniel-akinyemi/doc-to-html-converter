@@ -54,8 +54,10 @@ Input methods are the same as the converter: file drop, *Paste content*, or
 
 From the split result you can press **Export .xlsx** and pick the customer's
 Matrixify (Shopify) export. The tool fills the rich-text metafield columns
-per **`Variant SKU`** — each product's SKU is taken from the `SKU …` line in
-its doc header (e.g. `SKU HSB-119131`):
+per the **`Variant SKU`** column. That column actually holds the `ID …` code
+from the doc header (e.g. `ID 666-0387AA Manufacturer - Aira` → `666-0387AA`),
+so that's the match key; the `SKU …` line (e.g. `SKU HSB-119131`) is kept as a
+fallback key in case a row uses it instead. The five columns filled:
 
 | Split section              | Matrixify column                              |
 | -------------------------- | --------------------------------------------- |
@@ -68,12 +70,12 @@ its doc header (e.g. `SKU HSB-119131`):
 Columns are matched by header substring (`beyond.overview`, `beyond.specs`,
 `beyond.sizing_guide`, `beyond.care_storage`, `beyond.faqs`), and the tool
 uses the first sheet that has a `Variant SKU` column. Every other cell — `ID`,
-`Handle`, `Command`, `Body HTML`, etc. — is left exactly as it was; a cell is
-only written when our section has content (an empty section never blanks an
-existing value). The updated workbook downloads as `<name> — updated.xlsx`,
-and a report panel shows how many SKU rows matched, which products had no
-matching row, and which had no SKU in the doc. The `xlsx` parsing/writing uses
-SheetJS, loaded on demand from
+`Handle`, `Command`, `Body HTML`, `Export Summary` sheet, etc. — is left
+exactly as it was; a cell is only written when our section has content (an
+empty section never blanks an existing value). The updated workbook downloads
+as `<name> — updated.xlsx`, and a report panel shows how many rows matched,
+which products had no matching row, and which had no `ID …`/`SKU …` line in
+the doc. The `xlsx` parsing/writing uses SheetJS, loaded on demand from
 [`public/xlsx.full.min.js`](./public/xlsx.full.min.js).
 
 ## What's preserved
