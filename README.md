@@ -69,13 +69,23 @@ fallback key in case a row uses it instead. The five columns filled:
 
 Columns are matched by header substring (`beyond.overview`, `beyond.specs`,
 `beyond.sizing_guide`, `beyond.care_storage`, `beyond.faqs`), and the tool
-uses the first sheet that has a `Variant SKU` column. Every other cell — `ID`,
-`Handle`, `Command`, `Body HTML`, `Export Summary` sheet, etc. — is left
-exactly as it was; a cell is only written when our section has content (an
-empty section never blanks an existing value). The updated workbook downloads
-as `<name> — updated.xlsx`, and a report panel shows how many rows matched,
-which products had no matching row, and which had no `ID …`/`SKU …` line in
-the doc. The `xlsx` parsing/writing uses SheetJS, loaded on demand from
+uses the first sheet that has a `Variant SKU` column.
+
+**The exported sheet is filtered to matched products only.** Rows are grouped
+into product blocks by `Handle` (Matrixify continuation rows repeat or blank
+the Handle and carry no Variant SKU). A block is kept only if one of its rows'
+`Variant SKU` matched a split product — and the whole block is kept, including
+its continuation rows, so extra images/variants/metafields aren't lost.
+Unmatched products are dropped entirely. On the surviving rows, only the five
+`beyond.*` columns are written (and only when our section has content — an
+empty section never blanks an existing value); every other cell and the
+`Export Summary` sheet pass through untouched.
+
+The workbook downloads as `<name> — matched.xlsx`. So you know what was
+dropped, the report panel shows the **original** totals: original rows /
+products → kept / dropped, rows filled, cells written, columns mapped,
+products with no matching row, and products with no `ID …`/`SKU …` line in the
+doc. The `xlsx` parsing/writing uses SheetJS, loaded on demand from
 [`public/xlsx.full.min.js`](./public/xlsx.full.min.js).
 
 ## What's preserved
