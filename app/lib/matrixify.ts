@@ -65,8 +65,11 @@ const SECTION_COLUMN: { id: SectionId; re: RegExp }[] = [
 
 export type ExportReport = {
   sheetName: string;
-  rowsScanned: number; // data rows with a non-empty Variant SKU
-  rowsMatched: number; // ...of those, ones whose key matched a split product
+  originalRows: number; // data rows in the uploaded sheet
+  originalProducts: number; // distinct product blocks (by Handle) in the upload
+  keptRows: number; // data rows remaining in the exported sheet
+  droppedRows: number; // originalRows - keptRows
+  rowsMatched: number; // rows we wrote section HTML into
   cellsWritten: number;
   mappedColumns: { section: string; header: string }[];
   missingColumns: string[]; // sections whose column wasn't found in the sheet
@@ -161,27 +164,71 @@ export async function exportToMatrixify(
     if (!id && !sku) productsWithoutKey.push(p.title);
   }
 
+  const handleCol = headers.findIndex((h) => h.toLowerCase() === "handle");
+
+  // Walk data rows, grouping them into product blocks by Handle (Matrixify
+  // continuation rows repeat or blank the Handle and carry no Variant SKU).
+  // A block is "matched" if any of its rows' Variant SKU maps to a product.
+  type RowMeta = { r: number; group: string; product: SplitProduct | null };
+  const rowMetas: RowMeta[] = [];
+  const groupsSeen = new Set<string>();
+  let currentGroup = "";
+  for (let r = range.s.r + 1; r <= range.e.r; r++) {
+    const handle =
+      handleCol >= 0
+        ? cellText(ws[XLSX.utils.encode_cell({ r, c: handleCol })]?.v)
+        : "";
+    const variantSku = cellText(
+      ws[XLSX.utils.encode_cell({ r, c: skuCol })]?.v,
+    );
+    if (handle) currentGroup = handle;
+    const group =
+      handle || currentGroup || (variantSku ? `sku:${variantSku}` : `row:${r}`);
+    groupsSeen.add(group);
+    rowMetas.push({
+      r,
+      group,
+      product: variantSku ? byKey.get(variantSku) ?? null : null,
+    });
+  }
+
+  const matchedGroups = new Set<string>();
+  for (const m of rowMetas) if (m.product) matchedGroups.add(m.group);
+
+  // Write section HTML into the rows that matched a split product.
   const matchedProductSet = new Set<SplitProduct>();
-  let rowsScanned = 0;
   let rowsMatched = 0;
   let cellsWritten = 0;
-
-  for (let r = range.s.r + 1; r <= range.e.r; r++) {
-    const skuCell = ws[XLSX.utils.encode_cell({ r, c: skuCol })];
-    const variantSku = skuCell ? cellText(skuCell.v) : "";
-    if (!variantSku) continue;
-    rowsScanned++;
-    const product = byKey.get(variantSku);
-    if (!product) continue;
+  for (const m of rowMetas) {
+    if (!m.product) continue;
     rowsMatched++;
-    matchedProductSet.add(product);
+    matchedProductSet.add(m.product);
     for (const [id, c] of colFor) {
-      const html = product.sections[id] || "";
+      const html = m.product.sections[id] || "";
       if (!html.trim()) continue; // leave the cell as-is when we have nothing
-      ws[XLSX.utils.encode_cell({ r, c })] = { t: "s", v: html };
+      ws[XLSX.utils.encode_cell({ r: m.r, c })] = { t: "s", v: html };
       cellsWritten++;
     }
   }
+
+  // Rebuild the sheet keeping the header + only rows in matched blocks.
+  const keptMetas = rowMetas.filter((m) => matchedGroups.has(m.group));
+  const newWs: XLSXModule.WorkSheet = {};
+  const outOriginRows = [range.s.r, ...keptMetas.map((m) => m.r)];
+  outOriginRows.forEach((origR, outIdx) => {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const src = ws[XLSX.utils.encode_cell({ r: origR, c })];
+      if (src !== undefined) {
+        newWs[XLSX.utils.encode_cell({ r: outIdx, c })] = src;
+      }
+    }
+  });
+  newWs["!ref"] = XLSX.utils.encode_range({
+    s: { r: 0, c: range.s.c },
+    e: { r: outOriginRows.length - 1, c: range.e.c },
+  });
+  if (ws["!cols"]) newWs["!cols"] = ws["!cols"];
+  wb.Sheets[sheetName] = newWs;
 
   const matchedProducts: { title: string; key: string }[] = [];
   const unmatchedProducts: { title: string; key: string }[] = [];
@@ -194,19 +241,25 @@ export async function exportToMatrixify(
     });
   }
 
+  const originalRows = rowMetas.length;
+  const keptRows = keptMetas.length;
+
   const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
   const blob = new Blob([out], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
   const base = originalFileName.replace(/\.xlsx$/i, "") || "matrixify";
-  const fileName = `${base} — updated.xlsx`;
+  const fileName = `${base} — matched.xlsx`;
 
   return {
     blob,
     fileName,
     report: {
       sheetName,
-      rowsScanned,
+      originalRows,
+      originalProducts: groupsSeen.size,
+      keptRows,
+      droppedRows: originalRows - keptRows,
       rowsMatched,
       cellsWritten,
       mappedColumns,

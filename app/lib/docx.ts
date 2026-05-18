@@ -463,6 +463,14 @@ function bucketChunk(
     wrapper.querySelectorAll("p").forEach((p) => {
       if (!p.textContent?.trim() && !p.querySelector("img")) p.remove();
     });
+    // The accordion title is the section's header on the storefront, so the
+    // metafield body must not lead with its own heading.
+    while (
+      wrapper.firstElementChild &&
+      /^h[1-6]$/i.test(wrapper.firstElementChild.tagName)
+    ) {
+      wrapper.firstElementChild.remove();
+    }
     clampHeadingsIn(wrapper, doc);
     out[id] = wrapper.innerHTML.trim();
   }

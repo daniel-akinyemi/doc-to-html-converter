@@ -376,12 +376,16 @@ function ExportPanel({
         ✓ {status.fileName} downloaded
       </div>
       <div>
-        Sheet “{r.sheetName}” · {r.rowsMatched}/{r.rowsScanned} SKU row
-        {r.rowsScanned === 1 ? "" : "s"} matched · {r.cellsWritten} cell
-        {r.cellsWritten === 1 ? "" : "s"} written
+        Sheet “{r.sheetName}” · original {r.originalRows} row
+        {r.originalRows === 1 ? "" : "s"} / {r.originalProducts} product
+        {r.originalProducts === 1 ? "" : "s"} → kept{" "}
+        <span className="text-foreground">{r.keptRows}</span>, dropped{" "}
+        {r.droppedRows}
       </div>
       <div>
-        Columns filled: {r.mappedColumns.map((m) => m.section).join(", ") || "—"}
+        {r.rowsMatched} row{r.rowsMatched === 1 ? "" : "s"} filled ·{" "}
+        {r.cellsWritten} cell{r.cellsWritten === 1 ? "" : "s"} written ·
+        columns: {r.mappedColumns.map((m) => m.section).join(", ") || "—"}
         {r.missingColumns.length > 0 && (
           <span className="text-red-600 dark:text-red-400">
             {" "}
