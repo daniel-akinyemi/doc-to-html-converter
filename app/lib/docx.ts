@@ -432,6 +432,53 @@ function clampHeadingsIn(root: Element, doc: Document) {
   });
 }
 
+// Mammoth emits one <ol> per numbered paragraph when a non-list block sits
+// between them (the FAQ pattern: <ol><li>Q1</li></ol><p>A1</p><ol><li>Q2</li></ol>…),
+// so every item renders as "1." instead of "1, 2, 3, …". Consolidate runs of
+// single-item <ol>s into a single <ol>, absorbing the in-between blocks into
+// the matching <li>.
+function consolidateNumberedLists(wrapper: Element) {
+  const isSingleItemOl = (el: Element): boolean =>
+    el.tagName.toLowerCase() === "ol" &&
+    el.children.length === 1 &&
+    el.firstElementChild?.tagName.toLowerCase() === "li";
+
+  const children = Array.from(wrapper.children);
+  let i = 0;
+  while (i < children.length) {
+    if (!isSingleItemOl(children[i])) {
+      i++;
+      continue;
+    }
+    const ols: Element[] = [children[i]];
+    const bodies: Element[][] = [[]];
+    let j = i + 1;
+    while (j < children.length) {
+      const next = children[j];
+      if (isSingleItemOl(next)) {
+        ols.push(next);
+        bodies.push([]);
+        j++;
+        continue;
+      }
+      if (next.tagName.toLowerCase() === "ol") break; // multi-item ol terminates
+      bodies[bodies.length - 1].push(next);
+      j++;
+    }
+    if (ols.length >= 2) {
+      const firstLi = ols[0].firstElementChild as Element;
+      for (const b of bodies[0]) firstLi.appendChild(b);
+      for (let k = 1; k < ols.length; k++) {
+        const li = ols[k].firstElementChild as Element;
+        ols[0].appendChild(li);
+        for (const b of bodies[k]) li.appendChild(b);
+        ols[k].remove();
+      }
+    }
+    i = j;
+  }
+}
+
 function bucketChunk(
   nodes: Element[],
   doc: Document,
@@ -471,6 +518,9 @@ function bucketChunk(
     ) {
       wrapper.firstElementChild.remove();
     }
+    // Merge mammoth's per-paragraph "single-item <ol>" runs (the FAQ pattern)
+    // back into one continuously numbered list.
+    consolidateNumberedLists(wrapper);
     clampHeadingsIn(wrapper, doc);
     out[id] = wrapper.innerHTML.trim();
   }
