@@ -432,9 +432,67 @@ function clampHeadingsIn(root: Element, doc: Document) {
   });
 }
 
+// Mammoth emits one <ol> per numbered paragraph when a non-list block sits
+// between them (the FAQ pattern: <ol><li>Q1</li></ol><p>A1</p><ol><li>Q2</li></ol>…),
+// so every item renders as "1." instead of "1, 2, 3, …". Consolidate runs of
+// single-item <ol>s into a single <ol>, absorbing the in-between blocks into
+// the matching <li>.
+function consolidateNumberedLists(wrapper: Element) {
+  const isSingleItemOl = (el: Element): boolean =>
+    el.tagName.toLowerCase() === "ol" &&
+    el.children.length === 1 &&
+    el.firstElementChild?.tagName.toLowerCase() === "li";
+
+  const children = Array.from(wrapper.children);
+  let i = 0;
+  while (i < children.length) {
+    if (!isSingleItemOl(children[i])) {
+      i++;
+      continue;
+    }
+    const ols: Element[] = [children[i]];
+    const bodies: Element[][] = [[]];
+    let j = i + 1;
+    while (j < children.length) {
+      const next = children[j];
+      if (isSingleItemOl(next)) {
+        ols.push(next);
+        bodies.push([]);
+        j++;
+        continue;
+      }
+      if (next.tagName.toLowerCase() === "ol") break; // multi-item ol terminates
+      bodies[bodies.length - 1].push(next);
+      j++;
+    }
+    if (ols.length >= 2) {
+      const firstLi = ols[0].firstElementChild as Element;
+      for (const b of bodies[0]) firstLi.appendChild(b);
+      for (let k = 1; k < ols.length; k++) {
+        const li = ols[k].firstElementChild as Element;
+        ols[0].appendChild(li);
+        for (const b of bodies[k]) li.appendChild(b);
+        ols[k].remove();
+      }
+    }
+    i = j;
+  }
+}
+
+// Top-of-overview noise from the doc header: "SKU PROC-80721154",
+// "ID 804-0151AA Manufacturer: Procter & Gamble P&G - Super Floss …". We
+// strip these and re-emit a single clean "Inventory ID: <id>" line.
+function isHeaderMetadataBlock(el: Element): boolean {
+  const t = (el.textContent || "").trim();
+  if (!t) return true;
+  if (t.length > 300) return false;
+  return /^\s*(SKU|ID)\b/i.test(t);
+}
+
 function bucketChunk(
   nodes: Element[],
   doc: Document,
+  productId?: string,
 ): Record<SectionId, string> {
   const buckets: Record<SectionId, Element[]> = {
     overview: [], specifications: [], sizing: [], care: [], faq: [],
@@ -457,7 +515,12 @@ function bucketChunk(
   }
   const out = emptySections();
   for (const { id } of SECTION_META) {
-    if (buckets[id].length === 0) continue;
+    if (
+      buckets[id].length === 0 &&
+      !(id === "overview" && productId)
+    ) {
+      continue;
+    }
     const wrapper = doc.createElement("div");
     for (const el of buckets[id]) wrapper.appendChild(el);
     wrapper.querySelectorAll("p").forEach((p) => {
@@ -471,6 +534,24 @@ function bucketChunk(
     ) {
       wrapper.firstElementChild.remove();
     }
+    // Overview only: strip the doc-header "SKU …" / "ID …" preamble lines and
+    // re-emit a single clean "Inventory ID: <id>" line at the top.
+    if (id === "overview") {
+      while (
+        wrapper.firstElementChild &&
+        isHeaderMetadataBlock(wrapper.firstElementChild)
+      ) {
+        wrapper.firstElementChild.remove();
+      }
+      if (productId) {
+        const inv = doc.createElement("p");
+        inv.textContent = `Inventory ID: ${productId}`;
+        wrapper.insertBefore(inv, wrapper.firstChild);
+      }
+    }
+    // Merge mammoth's per-paragraph "single-item <ol>" runs (the FAQ pattern)
+    // back into one continuously numbered list.
+    consolidateNumberedLists(wrapper);
     clampHeadingsIn(wrapper, doc);
     out[id] = wrapper.innerHTML.trim();
   }
@@ -555,14 +636,18 @@ export function splitDocument(html: string, fallbackTitle: string): SplitResult 
     }
   }
 
-  const products: SplitProduct[] = chunks.map((c, i) => ({
-    title:
-      c.title?.trim() ||
-      `${fallback}${chunks.length > 1 ? ` (${i + 1})` : ""}`,
-    id: extractId(c.nodes),
-    sku: extractSku(c.nodes),
-    sections: bucketChunk(c.nodes, doc),
-  }));
+  const products: SplitProduct[] = chunks.map((c, i) => {
+    const id = extractId(c.nodes);
+    const sku = extractSku(c.nodes);
+    return {
+      title:
+        c.title?.trim() ||
+        `${fallback}${chunks.length > 1 ? ` (${i + 1})` : ""}`,
+      id,
+      sku,
+      sections: bucketChunk(c.nodes, doc, id),
+    };
+  });
 
   return { products };
 }
