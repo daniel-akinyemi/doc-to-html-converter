@@ -479,9 +479,20 @@ function consolidateNumberedLists(wrapper: Element) {
   }
 }
 
+// Top-of-overview noise from the doc header: "SKU PROC-80721154",
+// "ID 804-0151AA Manufacturer: Procter & Gamble P&G - Super Floss …". We
+// strip these and re-emit a single clean "Inventory ID: <id>" line.
+function isHeaderMetadataBlock(el: Element): boolean {
+  const t = (el.textContent || "").trim();
+  if (!t) return true;
+  if (t.length > 300) return false;
+  return /^\s*(SKU|ID)\b/i.test(t);
+}
+
 function bucketChunk(
   nodes: Element[],
   doc: Document,
+  productId?: string,
 ): Record<SectionId, string> {
   const buckets: Record<SectionId, Element[]> = {
     overview: [], specifications: [], sizing: [], care: [], faq: [],
@@ -504,7 +515,12 @@ function bucketChunk(
   }
   const out = emptySections();
   for (const { id } of SECTION_META) {
-    if (buckets[id].length === 0) continue;
+    if (
+      buckets[id].length === 0 &&
+      !(id === "overview" && productId)
+    ) {
+      continue;
+    }
     const wrapper = doc.createElement("div");
     for (const el of buckets[id]) wrapper.appendChild(el);
     wrapper.querySelectorAll("p").forEach((p) => {
@@ -517,6 +533,21 @@ function bucketChunk(
       /^h[1-6]$/i.test(wrapper.firstElementChild.tagName)
     ) {
       wrapper.firstElementChild.remove();
+    }
+    // Overview only: strip the doc-header "SKU …" / "ID …" preamble lines and
+    // re-emit a single clean "Inventory ID: <id>" line at the top.
+    if (id === "overview") {
+      while (
+        wrapper.firstElementChild &&
+        isHeaderMetadataBlock(wrapper.firstElementChild)
+      ) {
+        wrapper.firstElementChild.remove();
+      }
+      if (productId) {
+        const inv = doc.createElement("p");
+        inv.textContent = `Inventory ID: ${productId}`;
+        wrapper.insertBefore(inv, wrapper.firstChild);
+      }
     }
     // Merge mammoth's per-paragraph "single-item <ol>" runs (the FAQ pattern)
     // back into one continuously numbered list.
@@ -605,14 +636,18 @@ export function splitDocument(html: string, fallbackTitle: string): SplitResult 
     }
   }
 
-  const products: SplitProduct[] = chunks.map((c, i) => ({
-    title:
-      c.title?.trim() ||
-      `${fallback}${chunks.length > 1 ? ` (${i + 1})` : ""}`,
-    id: extractId(c.nodes),
-    sku: extractSku(c.nodes),
-    sections: bucketChunk(c.nodes, doc),
-  }));
+  const products: SplitProduct[] = chunks.map((c, i) => {
+    const id = extractId(c.nodes);
+    const sku = extractSku(c.nodes);
+    return {
+      title:
+        c.title?.trim() ||
+        `${fallback}${chunks.length > 1 ? ` (${i + 1})` : ""}`,
+      id,
+      sku,
+      sections: bucketChunk(c.nodes, doc, id),
+    };
+  });
 
   return { products };
 }
