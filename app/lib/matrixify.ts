@@ -165,6 +165,10 @@ export async function exportToMatrixify(
   }
 
   const handleCol = headers.findIndex((h) => h.toLowerCase() === "handle");
+  const titleCol = headers.findIndex((h) => h.toLowerCase() === "title");
+  if (titleCol >= 0) {
+    mappedColumns.unshift({ section: "Title", header: headers[titleCol] });
+  }
 
   // Walk data rows, grouping them into product blocks by Handle (Matrixify
   // continuation rows repeat or blank the Handle and carry no Variant SKU).
@@ -203,6 +207,13 @@ export async function exportToMatrixify(
     if (!m.product) continue;
     rowsMatched++;
     matchedProductSet.add(m.product);
+    // Storefront product name — strip the "— Complete Buyer's Guide" suffix,
+    // which we already do when extracting product.title in splitDocument.
+    const title = m.product.title.trim();
+    if (titleCol >= 0 && title) {
+      ws[XLSX.utils.encode_cell({ r: m.r, c: titleCol })] = { t: "s", v: title };
+      cellsWritten++;
+    }
     for (const [id, c] of colFor) {
       const html = m.product.sections[id] || "";
       if (!html.trim()) continue; // leave the cell as-is when we have nothing
