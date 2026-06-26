@@ -207,9 +207,8 @@ export async function exportToMatrixify(
     if (!m.product) continue;
     rowsMatched++;
     matchedProductSet.add(m.product);
-    // Storefront product name — strip the "— Complete Buyer's Guide" suffix,
-    // which we already do when extracting product.title in splitDocument.
-    const title = m.product.title.trim();
+    // Storefront product name — the full doc heading, suffix included.
+    const title = (m.product.fullTitle || m.product.title).trim();
     if (titleCol >= 0 && title) {
       ws[XLSX.utils.encode_cell({ r: m.r, c: titleCol })] = { t: "s", v: title };
       cellsWritten++;
