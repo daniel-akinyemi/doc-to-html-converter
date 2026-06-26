@@ -350,7 +350,10 @@ export const SECTION_META: { id: SectionId; label: string }[] = [
 ];
 
 export type SplitProduct = {
+  /** Doc heading with the " — Complete Buyer's Guide" suffix stripped — used as the splitter UI label. */
   title: string;
+  /** Doc heading as-is (suffix kept) — written into the Matrixify "Title" column. */
+  fullTitle: string;
   /**
    * The "ID XXX" value from the doc header (e.g. "666-0387AA"). This is what
    * the customer's Matrixify "Variant SKU" column actually contains. "" if none.
@@ -587,6 +590,7 @@ export function splitDocument(html: string, fallbackTitle: string): SplitResult 
   const fallback = fallbackTitle.trim() || "Document";
   const blank = (): SplitProduct => ({
     title: fallback,
+    fullTitle: fallback,
     id: "",
     sku: "",
     sections: emptySections(),
@@ -608,15 +612,18 @@ export function splitDocument(html: string, fallbackTitle: string): SplitResult 
     if (isProductTitle(el)) titleIdxs.push(i);
   });
 
-  type Chunk = { title: string; nodes: Element[] };
+  type Chunk = { title: string; fullTitle: string; nodes: Element[] };
   const chunks: Chunk[] = [];
+  const normalizeTitle = (raw: string) => raw.replace(/\s+/g, " ").trim();
 
   if (titleIdxs.length <= 1) {
     const titleEl = titleIdxs.length === 1 ? nodes[titleIdxs[0]] : null;
-    const title = titleEl
-      ? cleanProductTitle(titleEl.textContent || "")
-      : fallback;
-    chunks.push({ title, nodes: nodes.filter((el) => el !== titleEl) });
+    const raw = titleEl?.textContent || "";
+    chunks.push({
+      title: titleEl ? cleanProductTitle(raw) : fallback,
+      fullTitle: titleEl ? normalizeTitle(raw) : fallback,
+      nodes: nodes.filter((el) => el !== titleEl),
+    });
   } else {
     const boundaries: number[] = [0];
     for (let k = 1; k < titleIdxs.length; k++) {
@@ -628,9 +635,11 @@ export function splitDocument(html: string, fallbackTitle: string): SplitResult 
     boundaries.push(nodes.length);
     for (let k = 0; k < titleIdxs.length; k++) {
       const titleEl = nodes[titleIdxs[k]];
+      const raw = titleEl.textContent || "";
       const slice = nodes.slice(boundaries[k], boundaries[k + 1]);
       chunks.push({
-        title: cleanProductTitle(titleEl.textContent || ""),
+        title: cleanProductTitle(raw),
+        fullTitle: normalizeTitle(raw),
         nodes: slice.filter((el) => el !== titleEl),
       });
     }
@@ -639,10 +648,10 @@ export function splitDocument(html: string, fallbackTitle: string): SplitResult 
   const products: SplitProduct[] = chunks.map((c, i) => {
     const id = extractId(c.nodes);
     const sku = extractSku(c.nodes);
+    const fallbackForIdx = `${fallback}${chunks.length > 1 ? ` (${i + 1})` : ""}`;
     return {
-      title:
-        c.title?.trim() ||
-        `${fallback}${chunks.length > 1 ? ` (${i + 1})` : ""}`,
+      title: c.title?.trim() || fallbackForIdx,
+      fullTitle: c.fullTitle?.trim() || fallbackForIdx,
       id,
       sku,
       sections: bucketChunk(c.nodes, doc, id),
